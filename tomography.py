@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
-from skimage.draw import line
+# from skimage import iradon
 from PIL import Image
+from scipy import signal
 
 lines = []
 sinogram = []
@@ -13,13 +14,9 @@ def radon_transform(image_name, number_of_emitters=180, angular_step=1, angular_
     image = pad_image(image)
     print(image.shape)
 
-    ANGLES = np.arange(0, angular_range, angular_step)  # kąty na których znajdują się detektory
+    ANGLES = np.arange(0, angular_range, angular_step)
     OFFSETS = np.linspace(-image.shape[0] / 2, image.shape[0] / 2, number_of_emitters)
-    radius = image.shape[0] / 2  # promien
-    output_image = np.zeros((image.shape[0], image.shape[1]))
-
-    # lines = []
-    # sinogram = []
+    radius = image.shape[0] / 2
 
     for angle in ANGLES:
         angle = np.deg2rad(angle)
@@ -36,6 +33,7 @@ def radon_transform(image_name, number_of_emitters=180, angular_step=1, angular_
 
     # print(lines)
     # print(sinogram)
+
     image = Image.fromarray(np.array(sinogram))
     image.show()
     # cv2.imwrite("RadonSheppchuj.jpg", np.array(sinogram))
@@ -122,21 +120,56 @@ def create_line(radius, points):
     return [(x, y) for x, y in result if ((x - radius) ** 2 + (y - radius) ** 2) <= radius_pow_2]
 
 
-def reverse(input_image, output_image_name="output_image.jpg"):
-
+# odtworzenie linii
+def reverse(input_image, output_image_name="output_image.png"):
     input_image = cv2.imread(input_image, 0)
-    output_image = np.zeros((input_image.shape[1],input_image.shape[0]))
 
     sinogram_reverse = np.array(sinogram)
+
+    output_image = np.zeros((input_image.shape[1], input_image.shape[0]))
+
+    sinogram_reverse = filter_projection(sinogram_reverse)
     for i in range(sinogram_reverse.shape[0]):
         for j in range(sinogram_reverse.shape[1]):
             for x, y in lines[i][j]:
                 if 0 <= x < input_image.shape[1] and 0 <= y < input_image.shape[0]:
                     output_image[x, y] += sinogram_reverse[i][j]
 
+    image = Image.fromarray(np.array(output_image))
+    image.show()
     cv2.imwrite(output_image_name, output_image)
 
 
+def low_pass_filter(number_freq, value):
+    filtering_array = np.full((1, number_freq * 2), value)
+    return filtering_array
+
+
+def hann_filter(number_freq):
+    filtering_array = np.hanning(number_freq * 2)
+    return filtering_array
+
+
+def ramp_filter(number_freq):
+    filtering_array = 2 * np.arange(number_freq + 1) / np.float32(2 * number_freq)
+    filtering_array = np.concatenate((filtering_array, filtering_array[number_freq - 1:0:-1]), axis=0)
+    return filtering_array
+
+
+def filter_projection(sinogram):
+    number_angles, number_offsets = sinogram.shape
+    number_freq = 2 * int(2 ** (int(np.ceil(np.log2(number_offsets)))))
+
+    filter_array = low_pass_filter(number_freq, 0.02)
+
+    padded_sinogram = np.concatenate((sinogram, np.zeros((number_angles, 2 * number_freq - number_offsets))), axis=1)
+
+    for i in range(number_angles):
+        padded_sinogram[i, :] = np.real(np.fft.ifft(np.fft.fft(padded_sinogram[i, :]) * filter_array))
+
+    return padded_sinogram[:, :number_offsets]
+
+
 if __name__ == '__main__':
-    radon_transform("Shepp_logan.jpg", 180, 1, 180)
-    reverse("Shepp_logan.jpg")
+    radon_transform("Shepp_logan.png", 180, 1, 180)
+    reverse("Shepp_logan.png")
