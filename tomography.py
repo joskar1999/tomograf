@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from PIL import Image as IMG
+from PIL import ImageTk as IMGtk
 import pydicom
 import _tkinter
 import tkinter
@@ -197,14 +198,20 @@ def read_dicom(image_name):
     return None
 
 
-def startSimulation(photo_name, select_filter):
+def startSimulation():
     global sinogram
     global lines
     sinogram = []
     lines = []
-    radon_transform(photo_name, 180, 1, 180)
-    reverse(photo_name, select_filter=select_filter)
+    radon_transform(image_name_placeholder.get(), 180, 1, 180)
+    reverse(image_name_placeholder.get(), select_filter=filter_mode.get())
 
+
+global filter_mode
+global patient_name_input
+global date_of_examination_input
+global comment_input
+global image_name_placeholder
 
 if __name__ == '__main__':
     # Window init
@@ -212,10 +219,16 @@ if __name__ == '__main__':
     root.resizable(0, 0)
     root.title("Tomography simulator")
 
-    image_name = "Shepp_logan.png"
+    image_name = "Kropka.jpg"
     loaded_image = cv2.imread(image_name, 0)
 
-    starting_photo = PhotoImage(file=image_name)
+    if image_name.endswith(".png"):
+        starting_photo = PhotoImage(file=image_name)
+    elif image_name.endswith(".jpg"):
+        starting_photo = IMG.open(image_name)
+        starting_photo = IMGtk.PhotoImage(starting_photo)
+
+
     canvas_starting_photo = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
     canvas_starting_photo.grid(row=0, column=0)
 
@@ -262,7 +275,7 @@ if __name__ == '__main__':
         ("Hyperbolic", 4),
     ]
 
-    filter_mode = IntVar()
+    filter_mode = IntVar(frame_for_inputs)
     # filter_mode.set(3)  # initialize
     row = 3
     for text, mode in MODES:
@@ -278,13 +291,12 @@ if __name__ == '__main__':
     # Entry dla nazwy zdjęcia
     image_name_placeholder = StringVar()
     image_name_placeholder.set(value="Nazwa zdjęcia")
-    image_name_input = Entry(frame_for_inputs)
-    image_name_input.insert(0, image_name_placeholder.get())
+    image_name_input = Entry(frame_for_inputs, textvariable=image_name_placeholder)
     image_name_input.grid(row=7, column=0)
 
     # przycisk startu -> dodać komand który wywoła funkcję
     startingButton = Button(frame_for_inputs, text="Rozpocznij",
-                            command=partial(startSimulation, "Shepp_logan.png", filter_mode.get()))
+                            command=partial(startSimulation))
     startingButton.grid(row=7, column=1)
 
     # canvas_starting_photo.create_image(0, 0, anchor=NW, image=starting_photo)
