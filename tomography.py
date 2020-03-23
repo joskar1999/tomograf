@@ -13,6 +13,10 @@ from functools import partial
 
 lines = []
 sinogram = []
+ANGLES = []
+sinogram_reverse = []
+output_image = []
+iteration_var = 0
 
 
 def radon_transform(image_name, number_of_emitters=180, angular_step=1, angular_range=180):
@@ -114,11 +118,15 @@ def create_line(points):
     return [(x, y) for x, y in result]
 
 
-def reverse(input_image, select_filter, output_image_name="output_image.png", ):
+def reverse(input_image, select_filter, output_image_name="output_image.png"):
+    global sinogram_reverse
+    global output_image
+
     input_image = create_pixel_array_from_dicom(input_image)
     sinogram_reverse = np.array(sinogram)
     output_image = np.zeros((input_image.shape[1], input_image.shape[0]))
     sinogram_reverse = filter_sinogram(sinogram_reverse, select_filter)
+
     for i in range(sinogram_reverse.shape[0]):
         for j in range(sinogram_reverse.shape[1]):
             for x, y in lines[i][j]:
@@ -128,6 +136,38 @@ def reverse(input_image, select_filter, output_image_name="output_image.png", ):
     image = IMG.fromarray(np.array(output_image))
     image.show()
     cv2.imwrite(output_image_name, output_image)
+
+
+def initialize_before_animation(input_image, select_filter):
+    global sinogram_reverse
+    global output_image
+    output_image = np.zeros((input_image.shape[1], input_image.shape[0]))
+    sinogram_reverse = filter_sinogram(np.array(sinogram), select_filter=select_filter)
+
+
+def create_photo_from_sinogram_animation(input_image):
+    global iteration_var
+    global sinogram_reverse
+    global output_image
+
+    if iteration_var < len(ANGLES):
+        for i in range(sinogram_reverse.shape[1]):
+            for x, y in lines[iteration_var][i]:
+                if 0 <= x < input_image.shape[1] and 0 <= y <= input_image.shape[0]:
+                    output_image[x, y] += sinogram_reverse[iteration_var][i]
+        iteration_var += 1
+        return True
+    else:
+        return False
+
+
+def create_animation(input_image):
+    if create_photo_from_sinogram_animation(input_image):
+        image = IMG.fromarray(output_image)
+        photo = IMGtk.PhotoImage(image)
+        canvas_reversed_sinogram.create_image(0, 0, photo, anchor=NW)
+        root.update()
+        root.after(50, create_animation(input_image))
 
 
 def hyperbolic_filter(number_freq):
@@ -164,7 +204,6 @@ def cropped_triangular_filter(number_freq):
 def filter_sinogram(sinogram, select_filter):
     number_angles, number_offsets = sinogram.shape
     number_freq = 2 * int(2 ** (int(np.ceil(np.log2(number_offsets)))))
-    filter_array = []
 
     if select_filter == 1:
         filter_array = hann_filter(number_freq)
@@ -201,10 +240,49 @@ def read_dicom(image_name):
 def startSimulation():
     global sinogram
     global lines
+    global sinogram_reverse
+
+    starting_photo = []
+
+    loaded_image = None
+    image_name = image_name_placeholder.get()
+
+    if image_name.endswith(".png"):
+        starting_photo = PhotoImage(file=image_name_placeholder.get())
+        loaded_image = cv2.imread(image_name, 0)
+    elif image_name.endswith(".jpg"):
+        starting_photo = IMG.open(image_name_placeholder.get())
+        starting_photo = IMGtk.PhotoImage(starting_photo)
+        loaded_image = cv2.imread(image_name, 0)
+    elif image_name.endswith(".dcm"):
+        loaded_image = create_pixel_array_from_dicom(image_name_placeholder.get())
+        dcm_image = IMG.fromarray(loaded_image)
+        starting_photo = IMGtk.PhotoImage(dcm_image)
+
+    canvas_starting_photo.create_image(0, 0, image=starting_photo, anchor=NW)
+
+    root.update()
+
     sinogram = []
     lines = []
+
     radon_transform(image_name_placeholder.get(), 180, 1, 180)
+
+    sinogram_to_array = IMG.fromarray(np.array(sinogram))
+    sinogram_photo = IMGtk.PhotoImage(sinogram_to_array)
+
+    canvas_sinogram.create_image(0, 0, image=sinogram_photo, anchor=NW)
+    root.update()
+
+    # initialize_before_animation(loaded_image,select_filter=filter_mode.get())
+    # create_animation(loaded_image)
+
     reverse(image_name_placeholder.get(), select_filter=filter_mode.get())
+
+    reversed_sinogram_photo = IMGtk.PhotoImage(IMG.fromarray(output_image))
+    canvas_reversed_sinogram.create_image(0, 0, image=reversed_sinogram_photo, anchor=NW)
+
+    root.wait_window()
 
 
 global filter_mode
@@ -219,26 +297,31 @@ if __name__ == '__main__':
     root.resizable(0, 0)
     root.title("Tomography simulator")
 
-    image_name = "Kropka.jpg"
-    loaded_image = cv2.imread(image_name, 0)
+    # image_name = "0002.dcm"
+    loaded_image = None
 
-    if image_name.endswith(".png"):
-        starting_photo = PhotoImage(file=image_name)
-    elif image_name.endswith(".jpg"):
-        starting_photo = IMG.open(image_name)
-        starting_photo = IMGtk.PhotoImage(starting_photo)
+    # if image_name.endswith(".png"):
+    #     starting_photo = PhotoImage(file=image_name)
+    #     loaded_image = cv2.imread(image_name, 0)
+    # elif image_name.endswith(".jpg"):
+    #     starting_photo = IMG.open(image_name)
+    #     starting_photo = IMGtk.PhotoImage(starting_photo)
+    #     loaded_image = cv2.imread(image_name, 0)
+    # elif image_name.endswith(".dcm"):
+    #     loaded_image = create_pixel_array_from_dicom(image_name)
+    #     dcm_image = IMG.fromarray(loaded_image)
+    #     starting_photo = IMGtk.PhotoImage(dcm_image)
 
-
-    canvas_starting_photo = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
+    canvas_starting_photo = Canvas(root, width=300, height=300)
     canvas_starting_photo.grid(row=0, column=0)
 
-    canvas_sinogram = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
+    canvas_sinogram = Canvas(root, width=300, height=300)
     canvas_sinogram.grid(row=0, column=1)
 
-    canvas_reversed_sinogram = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
+    canvas_reversed_sinogram = Canvas(root, width=300, height=300)
     canvas_reversed_sinogram.grid(row=0, column=2)
 
-    frame_for_inputs = Frame(root, width=250, height=loaded_image.shape[0])
+    frame_for_inputs = Frame(root, width=250, height=300)
     frame_for_inputs.grid(row=0, column=3)
     # nie zmniejszaj okna po umieszczeniu elementu
     frame_for_inputs.grid_propagate(0)
@@ -284,9 +367,9 @@ if __name__ == '__main__':
         b.grid(row=row, column=0)
         row = row + 1
 
-    canvas_starting_photo.create_image(0, 0, image=starting_photo, anchor=NW)
-    canvas_reversed_sinogram.create_image(0, 0, image=starting_photo, anchor=NW)
-    canvas_sinogram.create_image(0, 0, image=starting_photo, anchor=NW)
+    # canvas_starting_photo.create_image(0, 0, image=starting_photo, anchor=NW)
+    # canvas_reversed_sinogram.create_image(0, 0, image=starting_photo, anchor=NW)
+    # canvas_sinogram.create_image(0, 0, image=starting_photo, anchor=NW)
 
     # Entry dla nazwy zdjęcia
     image_name_placeholder = StringVar()
