@@ -6,6 +6,7 @@ import _tkinter
 import tkinter
 from tkinter import ttk
 from tkinter import *
+from functools import partial
 
 # from pydicom.pixel_data_handlers import gdcm_handler, pillow_handler
 
@@ -112,11 +113,11 @@ def create_line(points):
     return [(x, y) for x, y in result]
 
 
-def reverse(input_image, output_image_name="output_image.png"):
+def reverse(input_image, select_filter, output_image_name="output_image.png", ):
     input_image = create_pixel_array_from_dicom(input_image)
     sinogram_reverse = np.array(sinogram)
     output_image = np.zeros((input_image.shape[1], input_image.shape[0]))
-    sinogram_reverse = filter_sinogram(sinogram_reverse)
+    sinogram_reverse = filter_sinogram(sinogram_reverse, select_filter)
     for i in range(sinogram_reverse.shape[0]):
         for j in range(sinogram_reverse.shape[1]):
             for x, y in lines[i][j]:
@@ -159,11 +160,19 @@ def cropped_triangular_filter(number_freq):
     return filtering_array
 
 
-def filter_sinogram(sinogram):
+def filter_sinogram(sinogram, select_filter):
     number_angles, number_offsets = sinogram.shape
     number_freq = 2 * int(2 ** (int(np.ceil(np.log2(number_offsets)))))
+    filter_array = []
 
-    filter_array = triangular_filter(number_freq)
+    if select_filter == 1:
+        filter_array = hann_filter(number_freq)
+    elif select_filter == 2:
+        filter_array = low_pass_filter(number_freq, 0.02)
+    elif select_filter == 3:
+        filter_array = triangular_filter(number_freq)
+    else:
+        filter_array = hyperbolic_filter(number_freq)
 
     padded_sinogram = np.concatenate((sinogram, np.zeros((number_angles, 2 * number_freq - number_offsets))), axis=1)
 
@@ -179,8 +188,7 @@ def create_pixel_array_from_dicom(image_name):
         img = IMG.fromarray(np.uint8(image_dcm.pixel_array[0] * 255))
         # img.show()
         return np.array(img)
-
-    return cv2.imread(image_name)
+    return cv2.imread(image_name, 0)
 
 
 def read_dicom(image_name):
@@ -189,9 +197,13 @@ def read_dicom(image_name):
     return None
 
 
-def startSimulation():
-    radon_transform("0002.dcm", 180, 1, 180)
-    reverse("0002.dcm")
+def startSimulation(photo_name, select_filter):
+    global sinogram
+    global lines
+    sinogram = []
+    lines = []
+    radon_transform(photo_name, 180, 1, 180)
+    reverse(photo_name, select_filter=select_filter)
 
 
 if __name__ == '__main__':
@@ -250,12 +262,12 @@ if __name__ == '__main__':
         ("Hyperbolic", 4),
     ]
 
-    v = StringVar()
-    v.set(3)  # initialize
+    filter_mode = IntVar()
+    # filter_mode.set(3)  # initialize
     row = 3
     for text, mode in MODES:
         b = Radiobutton(frame_for_inputs, text=text,
-                        variable=v, value=mode)
+                        variable=filter_mode, value=mode)
         b.grid(row=row, column=0)
         row = row + 1
 
@@ -271,7 +283,8 @@ if __name__ == '__main__':
     image_name_input.grid(row=7, column=0)
 
     # przycisk startu -> dodać komand który wywoła funkcję
-    startingButton = Button(frame_for_inputs, text="Rozpocznij", command=startSimulation)
+    startingButton = Button(frame_for_inputs, text="Rozpocznij",
+                            command=partial(startSimulation, "Shepp_logan.png", filter_mode.get()))
     startingButton.grid(row=7, column=1)
 
     # canvas_starting_photo.create_image(0, 0, anchor=NW, image=starting_photo)
