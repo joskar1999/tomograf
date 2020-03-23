@@ -1,8 +1,13 @@
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image as IMG
 import pydicom
-from pydicom.pixel_data_handlers import gdcm_handler, pillow_handler
+import _tkinter
+import tkinter
+from tkinter import ttk
+from tkinter import *
+
+# from pydicom.pixel_data_handlers import gdcm_handler, pillow_handler
 
 lines = []
 sinogram = []
@@ -29,7 +34,7 @@ def radon_transform(image_name, number_of_emitters=180, angular_step=1, angular_
         sinogram.append(sinogram_row)
         lines.append(lines_row)
 
-    image = Image.fromarray(np.array(sinogram))
+    image = IMG.fromarray(np.array(sinogram))
     image.show()
 
     return np.array(sinogram)
@@ -118,7 +123,7 @@ def reverse(input_image, output_image_name="output_image.png"):
                 if 0 <= x < input_image.shape[1] and 0 <= y < input_image.shape[0]:
                     output_image[x, y] += sinogram_reverse[i][j]
 
-    image = Image.fromarray(np.array(output_image))
+    image = IMG.fromarray(np.array(output_image))
     image.show()
     cv2.imwrite(output_image_name, output_image)
 
@@ -170,9 +175,8 @@ def filter_sinogram(sinogram):
 
 def create_pixel_array_from_dicom(image_name):
     if image_name.endswith('.dcm'):
-
         image_dcm = pydicom.dcmread(image_name)
-        img = Image.fromarray(np.uint8(image_dcm.pixel_array[0] * 255))
+        img = IMG.fromarray(np.uint8(image_dcm.pixel_array[0] * 255))
         # img.show()
         return np.array(img)
 
@@ -185,7 +189,95 @@ def read_dicom(image_name):
     return None
 
 
-if __name__ == '__main__':
-    pydicom.config.image_handlers = [gdcm_handler, pillow_handler]
+def startSimulation():
     radon_transform("0002.dcm", 180, 1, 180)
     reverse("0002.dcm")
+
+
+if __name__ == '__main__':
+    # Window init
+    root = tkinter.Tk()
+    root.resizable(0, 0)
+    root.title("Tomography simulator")
+
+    image_name = "Shepp_logan.png"
+    loaded_image = cv2.imread(image_name, 0)
+
+    starting_photo = PhotoImage(file=image_name)
+    canvas_starting_photo = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
+    canvas_starting_photo.grid(row=0, column=0)
+
+    canvas_sinogram = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
+    canvas_sinogram.grid(row=0, column=1)
+
+    canvas_reversed_sinogram = Canvas(root, width=loaded_image.shape[1], height=loaded_image.shape[0])
+    canvas_reversed_sinogram.grid(row=0, column=2)
+
+    frame_for_inputs = Frame(root, width=250, height=loaded_image.shape[0])
+    frame_for_inputs.grid(row=0, column=3)
+    # nie zmniejszaj okna po umieszczeniu elementu
+    frame_for_inputs.grid_propagate(0)
+
+    patient_name = StringVar()
+    date_of_examination = StringVar()
+    comment = StringVar()
+
+    patient_name.set("Imię pacjenta")
+    date_of_examination.set("Data badania")
+    comment.set("Komentarz")
+
+    # labelki dla inputów
+    patient_name_label = Label(frame_for_inputs, textvariable=patient_name, fg="black")
+    date_of_examination_label = Label(frame_for_inputs, textvariable=date_of_examination, fg="black")
+    comment_label = Label(frame_for_inputs, textvariable=comment, fg="black")
+
+    patient_name_label.grid(row=0, column=0)
+    date_of_examination_label.grid(row=1, column=0)
+    comment_label.grid(row=2, column=0)
+
+    patient_name_input = Entry(frame_for_inputs)
+    date_of_examination_input = Entry(frame_for_inputs)
+    comment_input = Entry(frame_for_inputs)
+
+    patient_name_input.grid(row=0, column=1)
+    date_of_examination_input.grid(row=1, column=1)
+    comment_input.grid(row=2, column=1)
+
+    MODES = [
+        ("Hann", 1),
+        ("Low-pass", 2),
+        ("Triangular", 3),
+        ("Hyperbolic", 4),
+    ]
+
+    v = StringVar()
+    v.set(3)  # initialize
+    row = 3
+    for text, mode in MODES:
+        b = Radiobutton(frame_for_inputs, text=text,
+                        variable=v, value=mode)
+        b.grid(row=row, column=0)
+        row = row + 1
+
+    canvas_starting_photo.create_image(0, 0, image=starting_photo, anchor=NW)
+    canvas_reversed_sinogram.create_image(0, 0, image=starting_photo, anchor=NW)
+    canvas_sinogram.create_image(0, 0, image=starting_photo, anchor=NW)
+
+    # Entry dla nazwy zdjęcia
+    image_name_placeholder = StringVar()
+    image_name_placeholder.set(value="Nazwa zdjęcia")
+    image_name_input = Entry(frame_for_inputs)
+    image_name_input.insert(0, image_name_placeholder.get())
+    image_name_input.grid(row=7, column=0)
+
+    # przycisk startu -> dodać komand który wywoła funkcję
+    startingButton = Button(frame_for_inputs, text="Rozpocznij", command=startSimulation)
+    startingButton.grid(row=7, column=1)
+
+    # canvas_starting_photo.create_image(0, 0, anchor=NW, image=starting_photo)
+
+    root.mainloop()
+
+    # pydicom.config.image_handlers = [gdcm_handler, pillow_handler]
+    # radon_transform("0002.dcm", 180, 1, 180)
+    # reverse("0002.dcm")
