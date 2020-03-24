@@ -8,6 +8,7 @@ import tkinter
 from tkinter import ttk
 from tkinter import *
 from functools import partial
+import math
 
 # from pydicom.pixel_data_handlers import gdcm_handler, pillow_handler
 
@@ -20,6 +21,7 @@ iteration_var = 0
 
 
 def radon_transform(image_name, number_of_emitters=180, angular_step=1, angular_range=180):
+    global ANGLES
     # image = cv2.imread(image_name, 0)
     image = create_pixel_array_from_dicom(image_name)
     image = pad_image(image)
@@ -41,7 +43,6 @@ def radon_transform(image_name, number_of_emitters=180, angular_step=1, angular_
         lines.append(lines_row)
 
     image = IMG.fromarray(np.array(sinogram))
-    image.show()
 
     return np.array(sinogram)
 
@@ -134,26 +135,30 @@ def reverse(input_image, select_filter, output_image_name="output_image.png"):
                     output_image[x, y] += sinogram_reverse[i][j]
 
     image = IMG.fromarray(np.array(output_image))
-    image.show()
     cv2.imwrite(output_image_name, output_image)
 
 
 def initialize_before_animation(input_image, select_filter):
+    global sinogram
     global sinogram_reverse
     global output_image
+    global iteration_var
+
     output_image = np.zeros((input_image.shape[1], input_image.shape[0]))
     sinogram_reverse = filter_sinogram(np.array(sinogram), select_filter=select_filter)
+    iteration_var = 0
 
 
 def create_photo_from_sinogram_animation(input_image):
     global iteration_var
     global sinogram_reverse
     global output_image
+    global ANGLES
 
     if iteration_var < len(ANGLES):
         for i in range(sinogram_reverse.shape[1]):
             for x, y in lines[iteration_var][i]:
-                if 0 <= x < input_image.shape[1] and 0 <= y <= input_image.shape[0]:
+                if 0 <= x < input_image.shape[1] and 0 <= y < input_image.shape[0]:
                     output_image[x, y] += sinogram_reverse[iteration_var][i]
         iteration_var += 1
         return True
@@ -162,12 +167,17 @@ def create_photo_from_sinogram_animation(input_image):
 
 
 def create_animation(input_image):
+    global output_image
     if create_photo_from_sinogram_animation(input_image):
         image = IMG.fromarray(output_image)
         photo = IMGtk.PhotoImage(image)
-        canvas_reversed_sinogram.create_image(0, 0, photo, anchor=NW)
+        canvas_reversed_sinogram.create_image(0, 0, image=photo, anchor=NW)
+
+        MSE_val.set("RMSE:" + str(process_MSE(input_image, output_image)))
         root.update()
         root.after(50, create_animation(input_image))
+    else:
+        root.wait_window()
 
 
 def hyperbolic_filter(number_freq):
@@ -236,6 +246,8 @@ def read_dicom(image_name):
         return pydicom.dcmread(image_name)
     return None
 
+def process_MSE(input_image, current_image):
+    return round(np.sqrt(((input_image - current_image) ** 2).mean()), 2)
 
 def startSimulation():
     global sinogram
@@ -274,13 +286,13 @@ def startSimulation():
     canvas_sinogram.create_image(0, 0, image=sinogram_photo, anchor=NW)
     root.update()
 
-    # initialize_before_animation(loaded_image,select_filter=filter_mode.get())
-    # create_animation(loaded_image)
-
-    reverse(image_name_placeholder.get(), select_filter=filter_mode.get())
-
-    reversed_sinogram_photo = IMGtk.PhotoImage(IMG.fromarray(output_image))
-    canvas_reversed_sinogram.create_image(0, 0, image=reversed_sinogram_photo, anchor=NW)
+    if checkbox_val.get() == 1:
+        initialize_before_animation(loaded_image, select_filter=filter_mode.get())
+        create_animation(loaded_image)
+    else:
+        reverse(image_name_placeholder.get(), select_filter=filter_mode.get())
+        reversed_sinogram_photo = IMGtk.PhotoImage(IMG.fromarray(output_image))
+        canvas_reversed_sinogram.create_image(0, 0, image=reversed_sinogram_photo, anchor=NW)
 
     root.wait_window()
 
@@ -290,6 +302,8 @@ global patient_name_input
 global date_of_examination_input
 global comment_input
 global image_name_placeholder
+global checkbox_val
+global MSE_val
 
 if __name__ == '__main__':
     # Window init
@@ -300,17 +314,8 @@ if __name__ == '__main__':
     # image_name = "0002.dcm"
     loaded_image = None
 
-    # if image_name.endswith(".png"):
-    #     starting_photo = PhotoImage(file=image_name)
-    #     loaded_image = cv2.imread(image_name, 0)
-    # elif image_name.endswith(".jpg"):
-    #     starting_photo = IMG.open(image_name)
-    #     starting_photo = IMGtk.PhotoImage(starting_photo)
-    #     loaded_image = cv2.imread(image_name, 0)
-    # elif image_name.endswith(".dcm"):
-    #     loaded_image = create_pixel_array_from_dicom(image_name)
-    #     dcm_image = IMG.fromarray(loaded_image)
-    #     starting_photo = IMGtk.PhotoImage(dcm_image)
+    checkbox_val = IntVar()
+    MSE_val = DoubleVar()
 
     canvas_starting_photo = Canvas(root, width=300, height=300)
     canvas_starting_photo.grid(row=0, column=0)
@@ -382,10 +387,13 @@ if __name__ == '__main__':
                             command=partial(startSimulation))
     startingButton.grid(row=7, column=1)
 
-    # canvas_starting_photo.create_image(0, 0, anchor=NW, image=starting_photo)
+    checkbox_animation = Checkbutton(frame_for_inputs, text="Animacja", variable=checkbox_val)
+    checkbox_animation.grid(row=4, column=1)
+
+    MSE_val.set("RMSE:")
+    RMSE_label = Label(frame_for_inputs, textvariable=MSE_val)
+    RMSE_label.grid(row=5, column=1)
+
+
 
     root.mainloop()
-
-    # pydicom.config.image_handlers = [gdcm_handler, pillow_handler]
-    # radon_transform("0002.dcm", 180, 1, 180)
-    # reverse("0002.dcm")
