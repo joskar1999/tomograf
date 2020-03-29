@@ -8,6 +8,7 @@ import tkinter
 from tkinter import ttk
 from tkinter import *
 from functools import partial
+from pydicom.data import get_testdata_files
 import math
 
 # from pydicom.pixel_data_handlers import gdcm_handler, pillow_handler
@@ -176,8 +177,6 @@ def create_animation(input_image):
         MSE_val.set("RMSE:" + str(process_MSE(input_image, output_image)))
         root.update()
         root.after(50, create_animation(input_image))
-    else:
-        root.wait_window()
 
 
 def hyperbolic_filter(number_freq):
@@ -246,8 +245,10 @@ def read_dicom(image_name):
         return pydicom.dcmread(image_name)
     return None
 
+
 def process_MSE(input_image, current_image):
     return round(np.sqrt(((input_image - current_image) ** 2).mean()), 2)
+
 
 def startSimulation():
     global sinogram
@@ -289,12 +290,30 @@ def startSimulation():
     if checkbox_val.get() == 1:
         initialize_before_animation(loaded_image, select_filter=filter_mode.get())
         create_animation(loaded_image)
+        save_dicom()
     else:
         reverse(image_name_placeholder.get(), select_filter=filter_mode.get())
         reversed_sinogram_photo = IMGtk.PhotoImage(IMG.fromarray(output_image))
         canvas_reversed_sinogram.create_image(0, 0, image=reversed_sinogram_photo, anchor=NW)
-
+        save_dicom()
     root.wait_window()
+
+
+def save_dicom():
+    filename = get_testdata_files('CT_small.dcm')[0]
+    dcm_frame = pydicom.dcmread(filename)
+
+    dcm_frame.PatientName = patient_name_input.get()
+    dcm_frame.StudyDate = date_of_examination_input.get()
+    dcm_frame.StudyDescription = comment_input.get()
+    dcm_frame.Rows = output_image.shape[0]
+    dcm_frame.Columns = output_image.shape[1]
+
+    img_dcm = output_image * 1024
+    np.round(img_dcm, decimals=0, out=img_dcm)
+    img_dcm = img_dcm.astype('int16')
+    dcm_frame.PixelData = img_dcm.tobytes()
+    dcm_frame.save_as('out.dcm')
 
 
 global filter_mode
@@ -394,6 +413,5 @@ if __name__ == '__main__':
     RMSE_label = Label(frame_for_inputs, textvariable=MSE_val)
     RMSE_label.grid(row=5, column=1)
 
-
-
     root.mainloop()
+    root.wait_window()
